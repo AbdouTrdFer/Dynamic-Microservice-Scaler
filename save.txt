@@ -1,0 +1,59 @@
+@routes_bp.route('/stats', methods=['GET'])  # Modifié pour ne pas répéter '/api'
+def get_container_metrics():
+    try:
+        metrics = []
+        for container in client.containers.list():
+            # Pause pour s'assurer d'avoir des données précises
+            time.sleep(1)  # Pause de 1 seconde
+
+            # Récupérer les statistiques du conteneur
+            stats = container.stats(stream=False)
+
+            # Extraction des données CPU
+            cpu_stats = stats['cpu_stats']
+            precpu_stats = stats['precpu_stats']
+
+            # Calcul de la différence de temps CPU utilisé
+            cpu_delta = cpu_stats['cpu_usage']['total_usage'] - precpu_stats['cpu_usage']['total_usage']
+            
+            # Calcul de la différence de temps total CPU disponible
+            system_delta = cpu_stats['system_cpu_usage'] - precpu_stats['system_cpu_usage']
+
+            # Calcul de l'usage du CPU, en prenant en compte le nombre de cœurs de CPU
+            cpu_usage_percentage = 0.0
+            if system_delta > 0 and cpu_delta >= 0:
+                cpu_usage_percentage = (cpu_delta / system_delta) * len(cpu_stats['cpu_usage']['percpu_usage']) * 100
+
+            # Extraction des données de mémoire
+            memory_usage = stats['memory_stats']['usage']
+            memory_limit = stats['memory_stats']['limit']
+            memory_usage_percentage = (memory_usage / memory_limit) * 100
+
+            # Calcul du nombre de processus
+            process_count = stats['pids_stats']['current']
+
+            # Statut du conteneur
+            container_status = container.status  # En cours, arrêté, etc.
+
+            # Vérification si blkio_stats et io_service_bytes_recursive existent
+            disk_usage = 0
+            if 'blkio_stats' in stats and 'io_service_bytes_recursive' in stats['blkio_stats']:
+                # S'il y a des éléments dans io_service_bytes_recursive, on les récupère
+                if len(stats['blkio_stats']['io_service_bytes_recursive']) > 0:
+                    disk_usage = stats['blkio_stats']['io_service_bytes_recursive'][0].get('value', 0)
+
+            # Ajouter les données à la liste des métriques
+            metrics.append({
+                "id": container.short_id,
+                "name": container.name,
+                "cpu_usage_percentage": round(cpu_usage_percentage, 2),
+                "memory_usage_mb": round(memory_usage / (1024 * 1024), 2),
+                "memory_usage_percentage": round(memory_usage_percentage, 2),
+                "process_count": process_count,
+                "status": container_status,
+                "disk_usage_bytes": disk_usage  # Ajouter utilisation du disque
+            })
+
+        return jsonify(metrics), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base href="./">
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <meta name="description" content="CoreUI - Open Source Bootstrap Admin Template">
+    <meta name="author" content="Łukasz Holeczek">
+    <meta name="keyword" content="Bootstrap,Admin,Template,Open,Source,jQuery,CSS,HTML,RWD,Dashboard">
+    <title>Monitoring CPU,RAM ..</title>
+    <link rel="apple-touch-icon" sizes="57x57" href="./assets/favicon/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="./assets/favicon/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="./assets/favicon/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="./assets/favicon/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="./assets/favicon/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="./assets/favicon/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="./assets/favicon/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="./assets/favicon/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-icon-180x180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/favicon/android-icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="./assets/favicon/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon/favicon-16x16.png">
+    
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="./assets/favicon/ms-icon-144x144.png">
+    <meta name="theme-color" content="#ffffff">
+    <!-- Vendors styles-->
+    <link rel="stylesheet" href="../static/simplebar/dist/simplebar.css">
+    <link rel="stylesheet" href="../static/css/vendors/simplebar.css">
+    <!-- Main styles for this application-->
+    <link href="../static/css/style.css" rel="stylesheet">
+    <!-- We use those styles to show code examples, you should remove them in your application.-->
+    <link href="../static/css/examples.css" rel="stylesheet">
+    <script defer src="../static/js/config.js"></script>
+    <script defer src="../static/js/color-modes.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@coreui/coreui/dist/js/coreui.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  </head>
+  <body>
+    <style>
+        .c-chart-wrapper {
+          position: relative;
+          width: 100%; /* Prendre 100% de la largeur de l'élément parent */
+          height: 400px; /* Ajustez la hauteur comme nécessaire */
+        }
+      
+        .chart {
+          width: 100% !important; /* Forcer le canvas à occuper toute la largeur */
+          height: 100% !important; /* Adapter la hauteur à celle du parent */
+        }
+      </style>
+      
+    <div class="sidebar sidebar-dark sidebar-fixed border-end" id="sidebar">
+      <div class="sidebar-header border-bottom">
+        <div class="sidebar-brand">
+          <svg class="sidebar-brand-full" width="88" height="32" alt="CoreUI Logo">
+            <use xlink:href="assets/brand/coreui.svg#full"></use>
+          </svg>
+          <svg class="sidebar-brand-narrow" width="32" height="32" alt="CoreUI Logo">
+            <use xlink:href="assets/brand/coreui.svg#signet"></use>
+          </svg>
+        </div>
+        <button class="btn-close d-lg-none" type="button" data-coreui-dismiss="offcanvas" data-coreui-theme="dark" 
+        aria-label="Close" 
+        onclick="coreui.Sidebar.getInstance(document.querySelector('#sidebar')).toggle()">
+    </button>
+      </div>
+      <ul class="sidebar-nav" data-coreui="navigation" data-simplebar>
+        <li class="nav-item"><a class="nav-link" href="index.html">
+          
+            <svg class="nav-icon">
+            </svg> Dashboard<span class="badge badge-sm bg-info ms-auto">NEW</span></a></li>   
+      </ul>
+      <div class="sidebar-footer border-top d-none d-md-flex">     
+        <button class="sidebar-toggler" type="button" data-coreui-toggle="unfoldable"></button>
+      </div>
+    </div>
+    <div class="wrapper d-flex flex-column min-vh-100">
+      <header class="header header-sticky p-0 mb-4">
+        <div class="container-fluid border-bottom px-4">
+          <button class="header-toggler" type="button" onclick="coreui.Sidebar.getInstance(document.querySelector('#sidebar')).toggle()" style="margin-inline-start: -14px;">
+            <svg class="icon icon-lg">
+            </svg>
+          </button>
+          <ul class="header-nav d-none d-lg-flex">
+            <li class="nav-item"><a class="nav-link" href="#">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link" href="#">Users</a></li>
+            <li class="nav-item"><a class="nav-link" href="#">Settings</a></li>
+          </ul>
+          <ul class="header-nav ms-auto">
+            <li class="nav-item"><a class="nav-link" href="#">
+                <svg class="icon icon-lg">
+                </svg></a></li>
+            <li class="nav-item"><a class="nav-link" href="#">
+                <svg class="icon icon-lg">
+                </svg></a></li>
+            <li class="nav-item"><a class="nav-link" href="#">
+                <svg class="icon icon-lg">
+                </svg></a></li>
+          </ul>
+          
+        </div>
+        <div class="container-fluid px-4">
+          <nav aria-label="breadcrumb">
+            <ol class="breadcrumb my-0">
+              <li class="breadcrumb-item"><a href="#">Home</a>
+              </li>
+              <li class="breadcrumb-item active"><span>Dashboard</span>
+              </li>
+            </ol>
+          </nav>
+        </div>
+      </header>
+      <div class="body flex-grow-1">
+        <div class="container-lg px-4">
+          <div class="row g-4 mb-4">
+           
+            <!-- /.col-->
+           
+            <!-- /.col-->
+           
+            <!-- /.col-->
+           
+            <!-- /.col-->
+          
+          </div>
+          <div id="alerts" class="alerts">
+            {% if alerts %}
+                {% for alert in alerts %}
+                    <div class="alert alert-danger">
+                        <strong>ALERT:</strong> Container {{ alert.container_name }} has exceeded the resource limits!
+                        CPU Usage: {{ alert.cpu_usage_percentage }}% | Memory Usage: {{ alert.memory_usage_percentage }}%
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No alerts at the moment.</p>
+            {% endif %}
+        </div>
+        
+        <style>
+            .alert {
+                color: white;
+                background-color: red;
+                padding: 15px;
+                margin: 10px 0;
+            }
+            .alert-danger {
+                background-color: red;
+            }
+        </style>
+        
+          
+      
+          <!-- /.card-->
+         <!-- Graphique -->
+         
+          <!-- /.row-->
+            <div class="container-lg px-4">
+    <!-- Statistiques -->
+    <div class="row g-4 mb-4">
+      <div class="col-sm-6 col-xl-3">
+        <div class="card text-white bg-primary">
+          <div class="card-body pb-0 d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fs-4 fw-semibold" id="total-containers">0</div>
+              <div>Total Conteneurs Actifs</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <div class="card text-white bg-info">
+          <div class="card-body pb-0 d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fs-4 fw-semibold" id="total-ram">0 GB</div>
+              <div>RAM Utilisée</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <div class="card text-white bg-warning">
+          <div class="card-body pb-0 d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fs-4 fw-semibold" id="cpu-usage">0%</div>
+              <div>Utilisation CPU</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="card mb-4 shadow-lg">
+      <div class="card-body">
+        <h4 class="card-title">Utilisation de RAM par Conteneur</h4>
+        <canvas id="ram-usage-chart"></canvas>
+      </div>
+    </div>
+    <div class="card mb-4 shadow-lg">
+      <div class="card-body">
+        <h4 class="card-title">Utilisation CPU par Conteneur</h4>
+        <canvas id="cpu-usage-chart"></canvas>
+      </div>
+    </div>
+         <!-- Graphiques pour visualiser la consommation de ressources -->
+
+    <div class="card mb-4 shadow-lg">
+          <div class="card-body">
+            <h4 class="card-title">Graphiques des processus gourmands</h4>
+            <canvas id="process-cpu-usage-chart"></canvas>
+          </div>
+    </div>
+        
+
+    <!-- Table des Conteneurs -->
+    <div class="card mb-4 shadow-lg">
+      <div class="card-body">
+        <h4 class="card-title text-center my-4">Liste des Conteneurs</h4>
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover table-striped align-middle">
+            <thead class="table-dark">
+              <tr class="text-center">
+                <th>ID Conteneur</th>
+                <th>Nom</th>
+                <th>Statut</th>
+                <th>Utilisation CPU</th>
+                <th>Utilisation Mémoire</th>
+              </tr>
+            </thead>
+            <tbody id="container-table">
+              <!-- Les lignes seront générées dynamiquement -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="container-info">
+      <!-- Conteneurs et leur utilisation du CPU seront affichés ici -->
+  </div>
+
+  <button id="scaleButton" onclick="triggerScale()">Démarrer Scaling Horizontal</button>
+
+  
+  </div>
+ 
+  <script defer>
+    document.addEventListener("DOMContentLoaded", () => {
+      let ramChart, cpuChart, processCpuChart;
+  
+      const fetchMetrics = async () => {
+        try {
+          const metricsResponse = await fetch("/api/metrics");
+          const metrics = await metricsResponse.json();
+          document.getElementById("total-containers").innerText = metrics.totalContainers || 0;
+          document.getElementById("total-ram").innerText = metrics.totalRAM || "0 GB";
+          document.getElementById("cpu-usage").innerText = metrics.cpuUsage || "0%";
+        } catch (error) {
+          console.error("Erreur lors de la récupération des métriques globales :", error);
+        }
+      };
+  
+      const fetchContainers = async () => {
+        try {
+          const containersResponse = await fetch("/api/containers");
+          const containers = await containersResponse.json();
+  
+          const statsResponse = await fetch("/api/stats");
+          const stats = await statsResponse.json();
+  
+          // Vérifier si 'metrics' est présent dans la réponse et si c'est un tableau
+          if (!stats.metrics || !Array.isArray(stats.metrics)) {
+            console.error("Les statistiques ne sont pas au format attendu (tableau dans 'metrics').", stats);
+            return; // Sortir si 'metrics' n'est pas un tableau
+          }
+  
+          const statsMap = new Map();
+          stats.metrics.forEach(stat => {
+            statsMap.set(stat.id, stat);
+          });
+  
+          const tableBody = document.getElementById("container-table");
+          tableBody.innerHTML = "";
+  
+          let ramData = { labels: [], values: [] };
+          let cpuData = { labels: [], values: [] };
+  
+          containers.forEach(container => {
+            const containerStat = statsMap.get(container.id) || {};
+  
+            const statusLabel = getStatusLabel(container.status);
+  
+            const row =
+              `<tr>
+                <td class="text-center">${container.id}</td>
+                <td>${container.name}</td>
+                <td><span class="badge ${statusLabel.class}">${statusLabel.text}</span></td>
+                <td class="text-end">${containerStat.cpu_usage_percentage || "-"}%</td>
+                <td class="text-end">${containerStat.memory_usage_percentage || "-"}%</td>
+              </tr>`;
+            tableBody.innerHTML += row;
+  
+            if (container.status === "running") {
+              ramData.labels.push(container.name);
+              ramData.values.push(containerStat.memory_usage_percentage || 0);
+  
+              cpuData.labels.push(container.name);
+              cpuData.values.push(containerStat.cpu_usage_percentage || 0);
+            }
+          });
+  
+          updateRamChart(ramData);
+          updateCpuChart(cpuData);
+  
+          // Appel pour récupérer les processus et mettre à jour le graphique correspondant
+          const processData = await fetchProcessesData(containers);
+          updateProcessesCpuChart(processData);
+        } catch (error) {
+          console.error("Erreur lors de la récupération des conteneurs ou des statistiques :", error);
+        }
+      };
+  
+      const getStatusLabel = (status) => {
+        switch (status) {
+          case "running":
+            return { text: "En cours", class: "bg-success" };
+          case "paused":
+            return { text: "En pause", class: "bg-warning" };
+          case "stopped":
+            return { text: "Arrêté", class: "bg-danger" };
+          case "exited":
+            return { text: "Exité", class: "bg-secondary" };
+          default:
+            return { text: "Inconnu", class: "bg-dark" };
+        }
+      };
+  
+      const fetchProcessesData = async (containers) => {
+        try {
+          const processData = {
+            labels: [],
+            values: [],
+            details: [],
+          };
+  
+          for (const container of containers) {
+            if (container.status === "running") {
+              const response = await fetch(`/api/containers/${container.id}/top`);
+  
+              if (!response.ok) {
+                console.error(`Erreur HTTP ${response.status} pour le conteneur ${container.id}`);
+                continue;
+              }
+  
+              const processes = await response.json();
+  
+              if (processes && processes.Processes) {
+                const processMap = new Map();
+                processes.Processes.forEach(proc => {
+                  processMap.set(proc.pid, proc.command);
+                });
+  
+                const sortedProcesses = processes.Processes.sort((a, b) => parseFloat(b.cpu) - parseFloat(a.cpu));
+                const topProcesses = sortedProcesses.slice(0, 5);
+  
+                topProcesses.forEach(process => {
+                  const processName = process.command || "Unknown";
+                  const cpuUsage = parseFloat(process.cpu) || 0;
+                  const pid = process.pid || "N/A";
+                  const ppid = process.ppid || "N/A";
+                  const parentName = processMap.get(ppid) || `Parent_${ppid}`;
+  
+                  processData.labels.push(processName);
+                  processData.values.push(cpuUsage);
+                  processData.details.push({
+                    containerId: container.id,
+                    processName,
+                    pid,
+                    ppid,
+                    parentName,
+                    cpuUsage,
+                  });
+                });
+              } else {
+                console.error(`Aucun processus trouvé ou réponse invalide pour le conteneur ${container.id}`);
+              }
+            }
+          }
+  
+          return processData;
+        } catch (error) {
+          console.error("Erreur lors de la récupération des processus :", error);
+          return { labels: [], values: [], details: [] };
+        }
+      };
+  
+      const updateRamChart = (ramData) => {
+        const ctx = document.getElementById("ram-usage-chart").getContext("2d");
+        if (ramChart) ramChart.destroy();
+        ramChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: ramData.labels,
+            datasets: [{
+              label: "RAM Utilisée (%)",
+              data: ramData.values,
+              backgroundColor: "rgba(75, 192, 192, 0.2)",
+              borderColor: "rgba(75, 192, 192, 1)",
+              borderWidth: 1,
+            }],
+          },
+        });
+      };
+  
+      const updateCpuChart = (cpuData) => {
+        const ctx = document.getElementById("cpu-usage-chart").getContext("2d");
+        if (cpuChart) cpuChart.destroy();
+        cpuChart = new Chart(ctx, {
+          type: "pie",
+          data: {
+            labels: cpuData.labels,
+            datasets: [{
+              label: "Utilisation CPU (%)",
+              data: cpuData.values,
+              backgroundColor: [
+                "rgba(255, 99, 132, 0.2)",
+                "rgba(54, 162, 235, 0.2)",
+                "rgba(255, 206, 86, 0.2)",
+                "rgba(75, 192, 192, 0.2)",
+              ],
+              borderColor: [
+                "rgba(255, 99, 132, 1)",
+                "rgba(54, 162, 235, 1)",
+                "rgba(255, 206, 86, 1)",
+                "rgba(75, 192, 192, 1)",
+              ],
+              borderWidth: 1,
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              tooltip: {
+                enabled: true,
+                callbacks: {
+                  label: function (tooltipItem) {
+                    const containerName = cpuData.labels[tooltipItem.dataIndex];
+                    const cpuUsage = cpuData.values[tooltipItem.dataIndex];
+                    return `${containerName}: ${cpuUsage.toFixed(2)}%`;
+                  }
+                }
+              }
+            },
+            onHover: (event, elements) => {
+              if (elements.length > 0) {
+                const index = elements[0].index;
+                const containerName = cpuData.labels[index];
+                const cpuUsage = cpuData.values[index];
+                console.log(`Conteneur: ${containerName}, Utilisation CPU: ${cpuUsage}%`);
+              }
+            }
+          }
+        });
+      };
+  
+      const updateProcessesCpuChart = (processData) => {
+        const ctx = document.getElementById("process-cpu-usage-chart").getContext("2d");
+        if (processCpuChart) processCpuChart.destroy();
+  
+        processCpuChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: processData.labels,
+            datasets: [{
+              label: "Utilisation CPU des processus",
+              data: processData.values,
+              backgroundColor: "rgba(153, 102, 255, 0.2)",
+              borderColor: "rgba(153, 102, 255, 1)",
+              borderWidth: 1,
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              tooltip: {
+                enabled: true,
+                callbacks: {
+                  label: function(tooltipItem) {
+                    const index = tooltipItem.dataIndex;
+                    const details = processData.details[index];
+  
+                    return [
+                      `Conteneur: ${details.containerId}`,
+                      `Nom du processus: ${details.processName}`,
+                      `PID: ${details.pid}`,
+                      `PPID: ${details.ppid}`,
+                      `Nom du parent: ${details.parentName}`,
+                      `Utilisation CPU: ${details.cpuUsage.toFixed(2)}%`,
+                    ].join("\n");
+                  }
+                }
+              }
+            }
+          }
+        });
+      };
+  
+      // Initialiser les graphiques et récupérer les données
+      fetchMetrics();
+      fetchContainers();
+    });
+    const fetchAlerts = async () => {
+    try {
+        const statsResponse = await fetch("/api/stats");
+        const stats = await statsResponse.json();
+
+        const alertDiv = document.getElementById("alerts");
+        alertDiv.innerHTML = ""; // Réinitialiser les anciennes alertes
+
+        if (stats.alerts && stats.alerts.length > 0) {
+            stats.alerts.forEach(alert => {
+                const alertElement = document.createElement("div");
+                alertElement.classList.add("alert", "alert-danger");
+                alertElement.innerHTML = `
+                    <strong>ALERT:</strong> Container ${alert.name} has exceeded the resource limits!
+                    CPU Usage: ${alert.cpu_usage}% | Memory Usage: ${alert.mem_usage}%
+                `;
+                alertDiv.appendChild(alertElement);
+            });
+        } else {
+            alertDiv.innerHTML = "<p>No alerts at the moment.</p>";
+        }
+    } catch (error) {
+        console.error("Erreur lors de la récupération des alertes :", error);
+    }
+};
+
+// Appelez cette fonction régulièrement ou au chargement de la page
+fetchAlerts();
+
+
+  </script>
+  
+  
+    <!-- Plugins and scripts required by this view-->
+   
+    <script src="./static/js/main.js"></script>
+  
+</body>
+</html>
