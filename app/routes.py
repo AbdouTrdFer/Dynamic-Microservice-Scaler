@@ -6,29 +6,37 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter # reportlab pdf , letter le format de page a4...
 from reportlab.pdfgen import canvas
 import io
-import matplotlib.pyplot as plt
-import numpy as np
-
+import matplotlib.pyplot as plt # permet de sauvegarder les graphe au format png
+import numpy as np  # Bibliothèque pour les calculs mathématiques et le traitement de données scientifiques
+import os #interagir avec os
+import itertools #optimiser les boucles imbrique pour reduire le complexite
+import subprocess
+import yaml #manipulation des fichiers .yml
 
 routes_bp = Blueprint('routes', __name__)  # Définir un blueprint
 
 # Initialisation du client Docker
 client = docker.from_env()
+CPU_THRESHOLD = 85  # Seuil pour l'utilisation CPU en pourcentage
+RAM_THRESHOLD = 85  # Seuil pour l'utilisation RAM en pourcentage
 
+# Chemin du fichier de configuration NGINX
 
-# Seuils d'utilisation du CPU et de la RAM
-CPU_THRESHOLD = 90  # Seuil pour l'utilisation CPU en pourcentage
-RAM_THRESHOLD = 90  # Seuil pour l'utilisation RAM en pourcentage
+# Liste des conteneurs actifs pour le load balancing
+active_containers = []
+
+# Initialisation du round robin
+round_robin = itertools.cycle(active_containers) #parcourir containers si il atteint la fin de iterable
 
 def send_email_with_multiple_alerts(containers_data):
     try:
         # Configuration de l'email
         sender_email = "arthurneo52@gmail.com"
         receiver_email = "ferhanabdelali@gmail.com"
-        password = "hnbt kgrc hlhq tptt"
+        password = "private"
 
         # Création du message
         msg = MIMEMultipart()
@@ -36,13 +44,13 @@ def send_email_with_multiple_alerts(containers_data):
         msg['To'] = receiver_email
         msg['Subject'] = f"ALERT: Multiple Containers Exceeded Usage Limits"
         
-        # Générer le contenu du corps de l'email
+        # corps de l'email
         body = "The following containers have exceeded the resource usage limits:\n\n"
         for container in containers_data:
             body += f"- {container['name']}: CPU = {container['cpu_usage']}%, RAM = {container['mem_usage']}%\n"
         msg.attach(MIMEText(body, 'plain'))
 
-        # Générer un graphique combiné
+        #  graphique combiné
         pdf_buffer = generate_combined_graph_pdf(containers_data)
 
         # Attacher le PDF
@@ -181,31 +189,48 @@ def get_global_metrics():
         return jsonify(metrics), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+#load balancing fcts
+# Fonction pour créer une nouvelle instance du conteneur
+NGINX_CONF_PATH = 'C:\\Users\\Lenovo\\Desktop\\Flask_project\\nginx\\sites\\app.conf'
+
+
+def get_active_containers():
+    """Récupère tous les conteneurs actifs"""
+    containers = client.containers.list()
+    active = []
+    for container in containers:
+        if "5002/tcp" in container.attrs['NetworkSettings']['Ports']:
+            active.append(container)
+    return active
+
 
 @routes_bp.route('/stats', methods=['GET'])
 def get_container_metrics():
     try:
         metrics = []
-        alert_containers = []  # Liste pour regrouper les conteneurs qui dépassent les seuils
+        alert_containers = []
+        containers_to_scale = []
 
         for container in client.containers.list():
             stats = container.stats(stream=False)
-            cpu_stats = stats['cpu_stats']
-            precpu_stats = stats['precpu_stats']
+            cpu_stats = stats.get('cpu_stats', {})
+            precpu_stats = stats.get('precpu_stats', {})
+            memory_stats = stats.get('memory_stats', {})
 
             # Calcul du pourcentage d'utilisation du CPU
-            cpu_delta = cpu_stats['cpu_usage']['total_usage'] - precpu_stats['cpu_usage']['total_usage']
-            system_delta = cpu_stats['system_cpu_usage'] - precpu_stats['system_cpu_usage']
+            cpu_delta = cpu_stats.get('cpu_usage', {}).get('total_usage', 0) - \
+                        precpu_stats.get('cpu_usage', {}).get('total_usage', 0)
+            system_delta = cpu_stats.get('system_cpu_usage', 0) - precpu_stats.get('system_cpu_usage', 0)
             cpu_usage_percentage = 0.0
-            if system_delta > 0 and cpu_delta >= 0:
-                cpu_usage_percentage = (cpu_delta / system_delta) * len(cpu_stats['cpu_usage']['percpu_usage']) * 100
+            if system_delta > 0:
+                cpu_usage_percentage = (cpu_delta / system_delta) * \
+                                        len(cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])) * 100
 
             # Calcul du pourcentage d'utilisation de la mémoire
-            memory_usage = stats['memory_stats']['usage']
-            memory_limit = stats['memory_stats']['limit']
+            memory_usage = memory_stats.get('usage', 0)
+            memory_limit = memory_stats.get('limit', 1)
             memory_usage_percentage = (memory_usage / memory_limit) * 100
 
-            # Ajout des métriques pour tous les conteneurs
             metrics.append({
                 "id": container.short_id,
                 "name": container.name,
@@ -214,41 +239,139 @@ def get_container_metrics():
                 "status": container.status
             })
 
-            # Vérification des seuils
             if cpu_usage_percentage > CPU_THRESHOLD or memory_usage_percentage > RAM_THRESHOLD:
                 alert_containers.append({
                     "name": container.name,
                     "cpu_usage": round(cpu_usage_percentage, 2),
                     "mem_usage": round(memory_usage_percentage, 2),
                 })
+                containers_to_scale.append(container)
 
-        # Si des conteneurs dépassent les seuils, envoyer un email consolidé
+        # Envoi des alertes si nécessaire
         if alert_containers:
-            send_email_with_multiple_alerts(alert_containers)
+            try:
+                send_email_with_multiple_alerts(alert_containers)
+            except Exception as email_error:
+                print(f"Erreur lors de l'envoi des emails : {email_error}")
 
-        # Retourner les métriques et alertes au format JSON
+        # Scaling horizontal : création de nouveaux conteneurs
+        new_containers = []
+        for container in containers_to_scale:
+            new_container = create_new_instance(container)
+            if new_container:
+                new_containers.append(new_container)
+
+        # Mise à jour de la configuration NGINX
+        try:
+            active_containers = get_active_containers()
+            update_nginx_config(active_containers + new_containers)
+        except Exception as nginx_error:
+            print(f"Erreur lors de la mise à jour de NGINX : {nginx_error}")
+
         return jsonify({"metrics": metrics, "alerts": alert_containers}), 200
 
+    except docker.errors.APIError as docker_error:
+        return jsonify({"error": f"Erreur Docker : {str(docker_error)}"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Erreur inconnue : {str(e)}"}), 500
 
-@routes_bp.route('/stats-debug', methods=['GET'])  
-def get_container_metrics_debug():
+def update_docker_compose_file(new_container_name, build_context):
+    """Met à jour le fichier docker-compose.yml pour ajouter une nouvelle instance avec build."""
     try:
-        metrics = []
-        for container in client.containers.list():
-            stats = container.stats(stream=False)
-            metrics.append({
-                "id": container.short_id,
-                "name": container.name,
-                "cpu_stats": stats['cpu_stats'],
-                "precpu_stats": stats['precpu_stats'],
-                "memory_stats": stats['memory_stats'],
-                "pids_stats": stats['pids_stats']
-            })
-        return jsonify(metrics), 200
+        # Charger le fichier docker-compose existant
+        with open('C:\\Users\\Lenovo\\Desktop\\Flask_project\\docker-compose.yml', 'r') as f:
+            compose_data = yaml.safe_load(f)
+
+        # Vérifier si 'services' existe dans le fichier
+        if 'services' not in compose_data:
+            compose_data['services'] = {}
+
+        # Créer une entrée de service dynamique avec un build
+        new_service = {
+            new_container_name: {
+                'build': build_context,  # Chemin vers le répertoire contenant le Dockerfile
+                'container_name': new_container_name,
+                'networks': ['backend'],  # Réseau à utiliser
+                'environment': [
+                    'FLASK_APP=app.py',
+                    'FLASK_ENV=production',
+                ],
+            }
+        }
+
+        # Ajouter le nouveau service à la section "services"
+        compose_data['services'].update(new_service)
+
+        # Sauvegarder les modifications dans docker-compose.yml
+        with open('C:\\Users\\Lenovo\\Desktop\\Flask_project\\docker-compose.yml', 'w') as f:
+            yaml.dump(compose_data, f, default_flow_style=False)
+
+        print(f"Service {new_container_name} ajouté avec succès à docker-compose.yml avec build.")
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Erreur lors de la mise à jour du fichier docker-compose.yml : {e}")
+def create_new_instance(container):
+    """Crée une nouvelle instance du conteneur via Docker Compose."""
+    try:
+        new_container_name = f"{container.name}_scaled"
+        build_context = "C:\\Users\\Lenovo\\Desktop\\Flask_project\\flask-app3"  
+
+        update_docker_compose_file(new_container_name, build_context)
+
+        # Exécution de docker-compose pour démarrer les conteneurs
+        
+        result = subprocess.run(['docker-compose', 'up', '-d'], check=True, capture_output=True, text=True)
+        print(result.stdout)
+        return new_container_name
+    except subprocess.CalledProcessError as e:
+        print(f"Erreur lors de l'exécution de docker-compose : {e.stderr}")
+        return None
+
+def update_nginx_config(active_containers):
+    """Met à jour le fichier de configuration NGINX sans supprimer les valeurs existantes."""
+    try:
+        # Ouvrir le fichier de configuration NGINX en mode lecture et écriture
+        with open('C:\\Users\\Lenovo\\Desktop\\Flask_project\\nginx\\sites\\app.conf', 'r+') as f:
+            config = f.read()
+
+            # Trouver le bloc upstream
+            start_index = config.find("upstream flask_app {")
+            if start_index == -1:
+                print("Bloc 'upstream flask_app' non trouvé dans le fichier.")
+                return
+
+            # Trouver la fin du bloc upstream
+            end_index = config.find("}", start_index)
+            if end_index == -1:
+                print("Fin du bloc 'upstream flask_app' non trouvée.")
+                return
+
+            # Extraire le bloc upstream existant
+            upstream_block = config[start_index:end_index + 1]
+
+            # Créer une nouvelle liste pour les  eserveurs existants et ajouter les nouveaux serveurs
+            new_upstream = upstream_block
+
+            # Ajouter les nouveaux serveurs sans supprimer les anciens
+            for container in active_containers:
+                # Vérifiez si le serveur existe déjà pour éviter les doublons
+                if f"server {container}:5000;" not in new_upstream:
+                    new_upstream += f"    server {container}:8000;\n"
+
+            # Remplacer l'ancien bloc upstream par le nouveau
+            config = config[:start_index] + new_upstream + config[end_index + 1:]
+
+            # Revenir au début du fichier et écraser l'ancien contenu
+            f.seek(0)
+            f.write(config)
+            f.truncate()
+
+        # Redémarrer NGINX pour appliquer les changements
+        subprocess.run(['nginx', '-s', 'reload'], check=True)
+        print("Configuration NGINX mise à jour et rechargée avec succès.")
+
+    except Exception as e:
+        print(f"Erreur lors de la mise à jour de la configuration NGINX : {e}")
 
 @routes_bp.route('/stop-container', methods=['POST'])  
 def stop_container():
@@ -377,7 +500,6 @@ def get_container_processes(container_id):
         cmd = f"docker exec {container_id} ps -eo pid,ppid,user,%cpu,%mem,comm --sort=-%cpu"
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
         
-        # Si la commande a échoué, une exception sera levée
         if result.returncode != 0:
             return jsonify({"error": "Impossible d'exécuter la commande Docker"}), 500
         
@@ -388,8 +510,8 @@ def get_container_processes(container_id):
             if len(parts) < 6:
                 continue
             processes.append({
-                "pid": parts[0],
-                "ppid": parts[1],  # ID du processus parent
+                "pid": int(parts[0]),  # Assurez-vous que le PID est un entier
+                "ppid": int(parts[1]),  # ID du processus parent
                 "user": parts[2],
                 "cpu": float(parts[3]) if parts[3].replace('.', '', 1).isdigit() else 0.0,
                 "mem": float(parts[4]) if parts[4].replace('.', '', 1).isdigit() else 0.0,
@@ -399,55 +521,5 @@ def get_container_processes(container_id):
         return jsonify({"Processes": processes}), 200
     except subprocess.CalledProcessError as e:
         return jsonify({"error": f"Erreur lors de l'exécution de la commande : {e}"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-
-# horizontal scaling automatique
-@routes_bp.route('/scale-containers', methods=['POST'])
-def scale_containers():
-    try:
-        # Obtenir les conteneurs actifs
-        containers = client.containers.list()
-        alert_containers = []  # Conteneurs à surveiller
-
-        for container in containers:
-            stats = container.stats(stream=False)
-            # Calcul des seuils pour chaque conteneur
-            cpu_stats = stats['cpu_stats']
-            precpu_stats = stats['precpu_stats']
-            cpu_delta = cpu_stats['cpu_usage']['total_usage'] - precpu_stats['cpu_usage']['total_usage']
-            system_delta = cpu_stats['system_cpu_usage'] - precpu_stats['system_cpu_usage']
-            cpu_usage = (cpu_delta / system_delta) * len(cpu_stats['cpu_usage']['percpu_usage']) * 100 if system_delta > 0 else 0
-
-            memory_usage = stats['memory_stats']['usage']
-            memory_limit = stats['memory_stats']['limit']
-            memory_usage_percentage = (memory_usage / memory_limit) * 100
-
-            # Vérifiez si le conteneur dépasse les seuils
-            if cpu_usage > CPU_THRESHOLD or memory_usage_percentage > RAM_THRESHOLD:
-                alert_containers.append({
-                    "name": container.name,
-                    "cpu_usage": round(cpu_usage, 2),
-                    "memory_usage": round(memory_usage_percentage, 2),
-                })
-
-        # Scaling horizontal si des conteneurs dépassent les seuils
-        if alert_containers:
-            for container_alert in alert_containers:
-                # Répliquer un conteneur concerné
-                container_to_scale = client.containers.get(container_alert["name"])
-                new_container = client.containers.run(
-                    container_to_scale.image.tags[0],  # Réutiliser la même image
-                    detach=True,  # Mode détaché
-                    name=f"{container_to_scale.name}_scaled_{int(time.time())}",
-                    environment=container_to_scale.attrs['Config']['Env'],  # Copier les variables d'environnement
-                    ports=container_to_scale.attrs['NetworkSettings']['Ports']
-                )
-                print(f"New container {new_container.name} created due to scaling.")
-
-        return jsonify({"message": "Scaling action completed", "alerts": alert_containers}), 200
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500

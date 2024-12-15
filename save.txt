@@ -57,3 +57,292 @@ def get_container_metrics():
         return jsonify(metrics), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+
+
+
+
+# load balancing
+import os
+import itertools
+
+# load balancing 
+# Fichier de configuration NGINX
+NGINX_CONF_PATH = "/etc/nginx/conf.d/docker_load_balancer.conf"
+
+# Liste des conteneurs actifs
+active_containers = []
+
+# Initialiser un cycle Round Robin
+round_robin = itertools.cycle(active_containers)
+
+# Méthode pour mettre à jour la configuration NGINX
+def update_nginx_config(containers):
+    """Met à jour le fichier de configuration NGINX avec les IP des conteneurs actifs."""
+    try:
+        with open(NGINX_CONF_PATH, 'w') as f:
+            f.write("http {\n")
+            f.write("    upstream backend {\n")
+            for container in containers:
+                ip = container.attrs['NetworkSettings']['IPAddress']
+                port = "8000"  # Port exposé dans le conteneur
+                f.write(f"        server {ip}:{port};\n")
+            f.write("    }\n")
+            f.write("\n    server {\n")
+            f.write("        listen 80;\n")
+            f.write("        location / {\n")
+            f.write("            proxy_pass http://backend;\n")
+            f.write("        }\n")
+            f.write("    }\n")
+            f.write("}\n")
+        os.system("nginx -s reload")  # Recharge la configuration NGINX
+        print("NGINX configuration updated and reloaded.")
+    except Exception as e:
+        print(f"Error updating NGINX config: {e}")
+
+# Route Flask pour le scaling
+@routes_bp.route('/scale-containers', methods=['POST'])
+def scale_containers():
+    try:
+        global round_robin, active_containers
+
+        containers = client.containers.list()
+        alert_containers = []  # Conteneurs dépassant les seuils
+        new_containers = []  # Liste des nouveaux conteneurs
+
+        # Surveillance des ressources des conteneurs
+        for container in containers:
+            stats = container.stats(stream=False)
+            cpu_stats = stats['cpu_stats']
+            precpu_stats = stats['precpu_stats']
+            cpu_delta = cpu_stats['cpu_usage']['total_usage'] - precpu_stats['cpu_usage']['total_usage']
+            system_delta = cpu_stats['system_cpu_usage'] - precpu_stats['system_cpu_usage']
+            cpu_usage = (cpu_delta / system_delta) * len(cpu_stats['cpu_usage']['percpu_usage']) * 100 if system_delta > 0 else 0
+
+            memory_usage = stats['memory_stats']['usage']
+            memory_limit = stats['memory_stats']['limit']
+            memory_usage_percentage = (memory_usage / memory_limit) * 100
+
+            if cpu_usage > CPU_THRESHOLD or memory_usage_percentage > RAM_THRESHOLD:
+                alert_containers.append(container)
+
+        # Scaling horizontal si des conteneurs dépassent les seuils
+        if alert_containers:
+            for container in alert_containers:
+                new_container = client.containers.run(
+                    container.image.tags[0],
+                    detach=True,
+                    name=f"{container.name}_scaled_{int(time.time())}",
+                    environment=container.attrs['Config']['Env'],
+                    ports={'8000/tcp': None}  # Expose dynamiquement le port
+                )
+                print(f"New container {new_container.name} created.")
+                new_containers.append(new_container)
+                active_containers.append(new_container)
+
+            # Mettre à jour le fichier NGINX
+            update_nginx_config(active_containers)
+
+            # Réinitialiser le round-robin
+            round_robin = itertools.cycle(active_containers)
+
+        return jsonify({
+            "message": "Scaling action completed.",
+            "new_containers": [container.name for container in new_containers]
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+# horizontal scaling automatique
+NGINX_CONF_PATH = "./docker_load_balancer.conf"
+
+# Liste des conteneurs actifs pour le load balancing
+active_containers = []
+
+# Initialisation du round robin
+round_robin = itertools.cycle(active_containers)
+
+# Fonction pour créer une nouvelle instance du conteneur
+def create_new_instance(container):
+    """Crée une nouvelle instance du conteneur avec la même configuration"""
+    try:
+        new_container = client.containers.run(
+            container.image.tags[0],  # Réutiliser l'image du conteneur
+            detach=True,
+            name=f"{container.name}_instance_{int(time.time())}",
+            environment=container.attrs['Config']['Env'],  # Copier les variables d'environnement
+            ports={'8000/tcp': None}  # Exposer le même port
+        )
+        print(f"New instance {new_container.name} created.")
+        active_containers.append(new_container)  # Ajouter la nouvelle instance à la liste active
+        return new_container
+    except Exception as e:
+        print(f"Error creating new instance: {e}")
+        return None
+
+# Fonction pour mettre à jour la configuration de NGINX (load balancer)
+def update_nginx_config(containers):
+    """Met à jour le fichier de configuration NGINX avec les nouvelles instances"""
+    try:
+        with open(NGINX_CONF_PATH, 'w') as f:
+            f.write("http {\n")
+            f.write("    upstream backend {\n")
+            for container in containers:
+                ip = container.attrs['NetworkSettings']['IPAddress']
+                port = 8000  # Port exposé dans le conteneur
+                f.write(f"        server {ip}:{port};\n")
+            f.write("    }\n")
+            f.write("\n    server {\n")
+            f.write("        listen 80;\n")
+            f.write("        location / {\n")
+            f.write("            proxy_pass http://backend;\n")
+            f.write("        }\n")
+            f.write("    }\n")
+            f.write("}\n")
+        os.system("nginx -s reload")  # Recharge la configuration NGINX
+        print("NGINX configuration updated and reloaded.")
+    except Exception as e:
+        print(f"Error updating NGINX config: {e}")
+
+# Surveillance des conteneurs et scaling
+def scale_containers():
+    """Surveille les conteneurs et effectue un scaling horizontal si nécessaire"""
+    try:
+        containers = client.containers.list()  # Liste des conteneurs actifs
+        alert_containers = []  # Conteneurs à surveiller pour dépasser les seuils
+
+        # Surveillance des ressources des conteneurs
+        for container in containers:
+            stats = container.stats(stream=False)
+            cpu_stats = stats['cpu_stats']
+            precpu_stats = stats['precpu_stats']
+            cpu_delta = cpu_stats['cpu_usage']['total_usage'] - precpu_stats['cpu_usage']['total_usage']
+            system_delta = cpu_stats['system_cpu_usage'] - precpu_stats['system_cpu_usage']
+            cpu_usage = (cpu_delta / system_delta) * len(cpu_stats['cpu_usage']['percpu_usage']) * 100 if system_delta > 0 else 0
+
+            memory_usage = stats['memory_stats']['usage']
+            memory_limit = stats['memory_stats']['limit']
+            memory_usage_percentage = (memory_usage / memory_limit) * 100
+
+            if cpu_usage > CPU_THRESHOLD or memory_usage_percentage > RAM_THRESHOLD:
+                alert_containers.append(container)
+
+        # Si des conteneurs dépassent les seuils, effectuer un scaling horizontal
+        if alert_containers:
+            new_containers = []
+            for container in alert_containers:
+                new_container = create_new_instance(container)
+                if new_container:
+                    new_containers.append(new_container)
+            
+            # Mettre à jour la configuration NGINX pour équilibrer la charge
+            update_nginx_config(active_containers)
+
+            return jsonify({
+                "message": "Scaling action completed.",
+                "new_containers": [container.name for container in new_containers]
+            }), 200
+        else:
+            return jsonify({"message": "No containers need scaling."}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+        locustfile.py
+        from locust import HttpUser, task, between
+
+class LoadBalancerTest(HttpUser):
+    wait_time = between(1, 2)  # Intervalle aléatoire entre les requêtes (en secondes)
+
+    @task
+    def send_request(self):
+        # Envoie une requête vers NGINX (pas directement à Flask)
+        self.client.get("/")  # Remplace "/" par un autre endpoint si nécessaire
+
+
+
+networks:
+  backend:
+    driver: bridge
+services:
+  flask-app1:
+    build: flask-app1
+    container_name: flask-app1
+    networks:
+    - backend
+    volumes:
+    - ./projects:/app
+  flask-app2:
+    build: flask-app2
+    container_name: flask-app2
+    networks:
+    - backend
+    volumes:
+    - ./projects:/app
+  flask-app3:
+    build: flask-app3
+    container_name: flask-app3
+    networks:
+    - backend
+    volumes:
+    - ./projects:/app
+  flask-app3_scaled:
+    container_name: flask-app3_scaled
+    environment:
+    - FLASK_APP=app.py
+    - FLASK_ENV=production
+    image: flask-app:latest
+    networks:
+    - backend
+  flask-app3_scaled_scaled:
+    container_name: flask-app3_scaled_scaled
+    environment:
+    - FLASK_APP=app.py
+    - FLASK_ENV=production
+    image: flask-app:latest
+    networks:
+    - backend
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    networks:
+    - backend
+    ports:
+    - 80:80
+    - 443:443
+    restart: unless-stopped
+    volumes:
+    - ./projects:/projects
+    - ./nginx/sites:/etc/nginx/conf.d
+version: '3.8'

@@ -1,15 +1,17 @@
+# Utiliser une image de base Python
 FROM python:3.9-slim
 
-# Installer les dépendances
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-# Copier le code source
-COPY . /app
+# Définir le répertoire de travail
 WORKDIR /app
 
-# Exposer le port 5000
+# Copier les fichiers nécessaires dans le conteneur
+COPY . /app
+
+# Installer les dépendances
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Exposer le port sur lequel Flask écoute
 EXPOSE 5000
 
-# Démarrer Flask
-CMD ["python", "app.py"]
+# Lancer l'application
+CMD ["gunicorn","python", "app.py"]
